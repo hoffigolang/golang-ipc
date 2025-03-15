@@ -17,7 +17,7 @@ var defaultSocketBasePath = `\\.\pipe\`
 
 // Create the named pipe (if it doesn't already exist) and start listening for a client to connect.
 // when a client connects and connection is accepted the serverReadDataFromConnectionToIncomingChannel function is called on a go routine.
-func (s *Server) runServer() error {
+func (s *Server) serverRun() error {
 	socketPath := filepath.Join(s.conf.SocketBasePath, s.Name)
 	var config *winio.PipeConfig
 
@@ -29,39 +29,39 @@ func (s *Server) runServer() error {
 	if err != nil {
 		return err
 	}
-
 	s.listen = listen
-	s.status = Listening
-	log.Debugln("server ok connected to namedPipe ... now entering accept loop")
-	go s.acceptClientConnectionsLoop()
+	s.status = SListening
+	s.statusChannel <- SListening
 
+	log.Debugln("server ok connected to namedPipe ... waiting for clients to connect...")
 	return nil
 }
 
-// dial - attempts to connect to a named pipe created by the server
-func (c *Client) dial() error {
+// clientConnectAndHandshakeToServer - attempts to connect to a named pipe created by the server
+func (c *Client) clientDialAndHandshakeToServer() error {
 	socketPath := filepath.Join(c.conf.SocketBasePath, c.Name)
 	startTime := time.Now()
 
 	for {
 		if c.conf.Timeout != 0 {
 			if time.Since(startTime) > c.conf.Timeout {
-				c.status = Closed
+				c.status = CError
+				c.statusChannel <- CError
 				return errors.New("client timed out trying to connect")
 			}
 		}
 
 		namedPipe, err := winio.DialPipe(socketPath, nil)
 		if err != nil {
-			if strings.Contains(err.Error(), "client the system cannot find the file specified.") == true {
+			if strings.Contains(err.Error(), "client the system cannot find the file specified.") {
+				// waiting for the server to come up
 			} else {
 				return err
 			}
 		} else {
 			c.conn = namedPipe
-
 			log.Debugln("client connected to server namedPipe ... now waiting for server handshake")
-			err = c.clientHandshake()
+			err = c.clientDoPassiveHandshake()
 			if err != nil {
 				return err
 			}

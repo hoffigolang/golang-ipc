@@ -29,22 +29,22 @@ Create a server with the default configuation and start listening for the client
 
 ```go
 
-	s, err := ipc.StartServer("<name of socket or pipe>", nil)
-	if err != nil {
-		log.Println(err)
-		return
-	}
+    s, err := ipc.StartServer("<name of socket or pipe>", nil)
+    if err != nil {
+        log.Println(err)
+        return
+    }
 
 ```
 Create a client and connect to the server:
 
 ```go
 
-	c, err := ipc.StartClient("<name of socket or pipe>", nil)
-	if err != nil {
-		log.Println(err)
-		return
-	}
+    c, err := ipc.StartClient("<name of socket or pipe>", nil)
+    if err != nil {
+        log.Println(err)
+        return
+    }
 
 ```
 
@@ -73,10 +73,10 @@ All received messages are formated into the type Message
 ```go
 
 type Message struct {
-	Err     error  // details of any error
-	MsgType int    // 0 = reserved , -1 is an internal message (disconnection or error etc), all messages recieved will be > 0
-	Data    []byte // message data received
-	Status  string // the status of the connection
+    Err     error  // details of any error
+    MsgType int    // 0 = reserved , -1 is an internal message (disconnection or error etc), all messages recieved will be > 0
+    Data    []byte // message data received
+    Status  string // the status of the connection
 }
 
 ```
@@ -86,7 +86,7 @@ type Message struct {
 
 ```go
 
-	//err := s.Write(1, []byte("<Message for client"))
+    //err := s.Write(1, []byte("<Message for client"))
     err := c.Write(1, []byte("<Message for server"))
 
     if err == nil {
@@ -102,9 +102,9 @@ Server options:
 ```go
 
     config := &ipc.ServerConfig{
-		Encryption: (bool),        // allows encryption to be switched off (bool - default is true)
+        Encryption: (bool),        // allows encryption to be switched off (bool - default is true)
         MaxMsgSize: (int) ,        // the maximum size in bytes of each message ( default is 3145728 / 3Mb)
-	    UnmaskPermissions: (bool), // make the socket writeable for other users (default is false)
+        UnmaskPermissions: (bool), // make the socket writeable for other users (default is false)
     }
 
 
@@ -114,12 +114,12 @@ Client options:
 
 ```go
 
-	config := ClientConfig  {
-		Encryption (bool),          // allows encryption to be switched off (bool - default is true)
-		Timeout    (float64),       // number of seconds to wait before timing out trying to connect/reconnect (default is 0 no timeout)
-		RetryTimer (time.Duration), // number of seconds to wait before connection retry (default is 20)
+    config := ClientConfig  {
+        Encryption (bool),          // allows encryption to be switched off (bool - default is true)
+        Timeout    (float64),       // number of seconds to wait before timing out trying to connect/reconnect (default is 0 no timeout)
+        RetryTimer (time.Duration), // number of seconds to wait before connection retry (default is 20)
 
-	}
+    }
 
 ```
 
@@ -130,7 +130,7 @@ Client options:
  Encryption can be swithed off by passing in a custom configuation to the server & client start function:
 
 ```go
-	Encryption: false
+    Encryption: false
 ```
 
  ### Unix Socket Permissions
@@ -140,7 +140,7 @@ Client options:
  The permission mask can be dropped during socket creation by passing a custom configuration to the server start function.  **This will make the socket writable for any user.**
 
 ```go
-	UnmaskPermissions: true
+    UnmaskPermissions: true
 ```
  Note: Tested on Linux, not tested on Mac, not implemented on Windows.
 

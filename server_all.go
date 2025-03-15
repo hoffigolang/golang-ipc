@@ -13,37 +13,30 @@ import (
 //
 // ipcName - is the name of the unix socket or named pipe that will be created, the client needs to use the same name
 func StartServer(ipcName string, config *ServerConfig) (*Server, error) {
-	err := checkIpcName(ipcName)
+	s, err := createServer(ipcName, config)
 	if err != nil {
 		return nil, err
 	}
 
-	s := &Server{
-		Name:     ipcName,
-		status:   NotConnected,
-		incoming: make(chan *Message),
-		outgoing: make(chan *Message),
-	}
-
-	if config == nil {
-		s.conf = DefaultServerConfig
-	} else {
-		s.conf = *config
-	}
-
-	if s.conf.Timeout < 0 {
-		s.conf.Timeout = DefaultServerConfig.Timeout
-	}
-	if s.conf.MaxMsgSize < minMsgSize {
-		s.conf.MaxMsgSize = DefaultServerConfig.MaxMsgSize
-	}
-	if s.conf.SocketBasePath == "" {
-		s.conf.SocketBasePath = DefaultServerConfig.SocketBasePath
-	}
-
-	err = s.runServer()
+	s.callback = consumeServerStatusChanges
+	go s.CallbackOnStatusChange(s.callback)
+	err = s.serverRun()
+	go s.acceptClientConnectionsLoop()
 
 	return s, err
+}
+
+func consumeServerStatusChanges(status ServerStatus) {
+	// nothing
+}
+func (s *Server) CallbackOnStatusChange(onConnected func(ServerStatus)) {
+	for {
+		status := <-s.statusChannel
+		log.Statusf("server: server status is now '%s'", s.status)
+		if onConnected != nil {
+			onConnected(status)
+		}
+	}
 }
 
 func (s *Server) acceptClientConnectionsLoop() {
@@ -51,52 +44,30 @@ func (s *Server) acceptClientConnectionsLoop() {
 		conn, err := s.listen.Accept()
 		if err != nil {
 			break
+		} else {
+			log.Debugln("server conn: client wants to connect... initiating handshake...")
 		}
 
-		if s.status == Listening || s.status == Disconnected {
+		if s.status == SListening || s.status == SDisconnected {
 			s.conn = conn
 
-			err2 := s.serverHandshakeWithClient()
-			if err2 != nil {
-				s.incoming <- &Message{Err: err2, MsgType: ConnectionError}
-				s.status = Error
+			err = s.serverHandshake()
+			if err != nil {
+				s.status = SError
+				s.statusChannel <- SError
 				s.listen.Close()
 				s.conn.Close()
 			} else {
+				s.status = SConnected
+				s.statusChannel <- SConnected
+				s.clientConnectionCount += 1
+				log.Debugln("server (a) client clientConnected <- true")
 				go s.serverReadDataFromConnectionToIncomingChannel()
 				go s.serverWriteDataFromOutgoingChannelToConnection()
-
-				s.status = Connected
-				log.Debugln("server sending initial IpcInternal msg")
-				s.incoming <- &Message{Status: s.status.String(), MsgType: IpcInternal}
-				s.connected <- true
 			}
 		}
 	}
 }
-
-// func (s *Server) connectionTimer() error {
-// 	if s.conf.Timeout != 0 {
-// 		ticker := time.NewTicker(s.conf.Timeout)
-// 		defer ticker.Stop()
-
-// 		select {
-
-// 		case <-s.connChannel:
-// 			return nil
-// 		case <-ticker.C:
-// 			s.listen.Close()
-// 			return errors.New("Timed out waiting for client to connect")
-// 		}
-// 	}
-
-// 	select {
-
-// 	case <-s.connChannel:
-// 		return nil
-// 	}
-
-// }
 
 func (s *Server) serverReadDataFromConnectionToIncomingChannel() {
 	bLen := make([]byte, 4)
@@ -109,34 +80,28 @@ func (s *Server) serverReadDataFromConnectionToIncomingChannel() {
 		}
 
 		mLen := bytesToInt(bLen)
-		msgRecvd := make([]byte, mLen)
-		res = s.readDataFromConnection(msgRecvd)
+		msg := make([]byte, mLen)
+		res = s.readDataFromConnection(msg)
 		if !res {
 			s.conn.Close()
 			break
 		}
 
+		var err error
 		if s.conf.Encryption {
-			msgFinal, err := decrypt(*s.enc.cipher, msgRecvd)
+			msg, err = decrypt(*s.enc.cipher, msg)
 			if err != nil {
-				s.incoming <- &Message{Err: err, MsgType: IpcInternal}
+				s.incoming <- NewIpcErrorMessage(err)
 				continue
 			}
-
-			if bytesToInt(msgFinal[:4]) == IpcCtrl {
-				//  type 0 = control message
-				log.Debugf("server.serverReadDataFromConnectionToIncomingChannel() msgFinal HandshakeOk: %d", bytesToInt(msgFinal[:4])) // TODO
-			} else {
-				s.incoming <- &Message{Data: msgFinal[4:], MsgType: bytesToMsgType(msgFinal[:4])}
-			}
-
+		}
+		msgTypeInt := bytesToInt(msg[:4])
+		msgData := msg[4:]
+		if msgTypeInt < 0 {
+			// TODO some func to call for internal messages from the other side
+			log.Debugf("server.serverReadDataFromConnectionToIncomingChannel() msgFinal HandshakeOk: %d", bytesToInt(msg))
 		} else {
-			if bytesToInt(msgRecvd[:4]) == IpcCtrl {
-				//  type 0 = control message
-				log.Debugf("server.serverReadDataFromConnectionToIncomingChannel() msgRecvd HandshakeOk: %d", bytesToInt(msgRecvd[:4])) // TODO
-			} else {
-				s.incoming <- &Message{Data: msgRecvd[4:], MsgType: bytesToMsgType(msgRecvd[:4])}
-			}
+			s.incoming <- NewMessage(MsgType(msgTypeInt), msgData)
 		}
 	}
 }
@@ -144,16 +109,15 @@ func (s *Server) serverReadDataFromConnectionToIncomingChannel() {
 func (s *Server) readDataFromConnection(buff []byte) bool {
 	_, err := io.ReadFull(s.conn, buff)
 	if err != nil {
-		if s.status == Closing {
-			s.status = Closed
-			s.incoming <- &Message{Status: s.status.String(), MsgType: IpcInternal}
-			s.incoming <- &Message{Err: errors.New("server has closed the connection"), MsgType: IpcInternal}
+		if s.status == SClosing {
+			s.status = SClosed
+			s.statusChannel <- SClosed
 			return false
 		}
 
 		if err == io.EOF {
-			s.status = Disconnected
-			s.incoming <- &Message{Status: s.status.String(), MsgType: IpcInternal}
+			s.status = SDisconnected
+			s.statusChannel <- SDisconnected
 			return false
 		}
 	}
@@ -162,48 +126,48 @@ func (s *Server) readDataFromConnection(buff []byte) bool {
 }
 
 //func (s *Server) reConnect() {
-//	s.status = ReConnecting
-//	s.received <- &Message{Status: s.status.String(), MsgType: Internal}
+//    s.status = ReConnecting
+//    s.received <- &Message{Status: s.status.String(), MsgType: Internal}
 //
-//	err := s.connectionTimer()
-//	if err != nil {
-//		s.status = Timeout
-//		s.received <- &Message{Status: s.status.String(), MsgType: Internal}
+//    err := s.connectionTimer()
+//    if err != nil {
+//        s.status = Timeout
+//        s.received <- &Message{Status: s.status.String(), MsgType: Internal}
 //
-//		s.received <- &Message{err: err, MsgType: -2}
-//	}
+//        s.received <- &Message{err: err, MsgType: -2}
+//    }
 //}
 
 // Read - blocking function, reads each message recieved
 // if MsgType is a negative number its an internal message
 func (s *Server) Read() (*Message, error) {
-	m, ok := <-s.incoming
+	msg, ok := <-s.incoming
 	if !ok {
 		return nil, errors.New("server the received channel has been closed")
 	}
 
-	if m.Err != nil {
-		return nil, m.Err
+	if msg.Err != nil {
+		return nil, msg.Err
 	}
 
-	return m, nil
+	return msg, nil
 }
 
 // Write - writes a message to the ipc connection
 // msgType - denotes the type of data being sent. 0 is a reserved type for internal messages and errors.
 func (s *Server) Write(msgType MsgType, message []byte) error {
-	if msgType == IpcCtrl {
-		return errors.New(fmt.Sprintf("server message type %d is reserved", IpcCtrl))
+	if msgType <= 0 {
+		return errors.New(fmt.Sprintf("server message type %d is reserved (0 or below)", msgType))
 	}
 
-	mlen := len(message)
+	msgLength := len(message)
 
-	if mlen > s.conf.MaxMsgSize {
+	if msgLength > s.conf.MaxMsgSize {
 		return errors.New("server message exceeds maximum message length")
 	}
 
-	if s.status == Connected {
-		s.outgoing <- &Message{MsgType: msgType, Data: message}
+	if s.status == SConnected {
+		s.outgoing <- NewMessage(msgType, message)
 	} else {
 		return errors.New(s.status.String())
 	}
@@ -243,18 +207,19 @@ func (s *Server) serverWriteDataFromOutgoingChannelToConnection() {
 			continue
 		}
 
-		time.Sleep(2 * time.Millisecond)
+		time.Sleep(10_000 * time.Nanosecond)
 	}
 }
 
 // Status - returns the current connection status
-func (s *Server) Status() Status {
+func (s *Server) Status() ServerStatus {
 	return s.status
 }
 
 // Close - closes the connection
 func (s *Server) Close() {
-	s.status = Closing
+	s.status = SClosing
+	s.statusChannel <- SClosing
 
 	if s.listen != nil {
 		s.listen.Close()
@@ -265,8 +230,7 @@ func (s *Server) Close() {
 	}
 
 	if s.incoming != nil {
-		s.incoming <- &Message{Status: s.status.String(), MsgType: IpcInternal}
-		s.incoming <- &Message{Err: errors.New("server has closed the connection"), MsgType: ConnectionError}
+		s.incoming <- NewIpcConnectionErrorMessage(errors.New("server has already closed the connection"))
 
 		close(s.incoming)
 	}
@@ -274,4 +238,37 @@ func (s *Server) Close() {
 	if s.outgoing != nil {
 		close(s.outgoing)
 	}
+}
+
+func createServer(ipcName string, config *ServerConfig) (*Server, error) {
+	err := ipcNameValidate(ipcName)
+	if err != nil {
+		return nil, err
+	}
+
+	s := &Server{
+		Name:                  ipcName,
+		status:                SNotConnected,
+		clientConnectionCount: 0,
+		statusChannel:         make(chan ServerStatus),
+		incoming:              make(chan *Message),
+		outgoing:              make(chan *Message),
+	}
+
+	if config == nil {
+		s.conf = DefaultServerConfig
+	} else {
+		s.conf = *config
+	}
+
+	if s.conf.Timeout < 0 {
+		s.conf.Timeout = DefaultServerConfig.Timeout
+	}
+	if s.conf.MaxMsgSize < minMsgSize {
+		s.conf.MaxMsgSize = DefaultServerConfig.MaxMsgSize
+	}
+	if s.conf.SocketBasePath == "" {
+		s.conf.SocketBasePath = DefaultServerConfig.SocketBasePath
+	}
+	return s, nil
 }

@@ -8,26 +8,31 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"errors"
+	log "github.com/igadmg/golang-ipc/ipclogging"
 	"io"
 	"net"
 )
 
-func (s *Server) keyExchange() ([32]byte, error) {
-	var shared [32]byte
+var ellipticCurve = elliptic.P384()
+var sharedSecretByteLength = 48
+var marshalledPublicKeyByteLength = 97
 
-	priv, pub, err := generateKeys()
+func (s *Server) serverKeyExchangeAndCreateSharedSecret() ([32]byte, error) {
+	var shared [32]byte // sha256 of sharedSecret
+
+	priv, pub, err := generateECDHKeyPair()
 	if err != nil {
 		return shared, err
 	}
 
 	// send servers public key
-	err = sendPublic(s.conn, pub)
+	err = sendPublicKey("server handshake:", s.conn, pub)
 	if err != nil {
 		return shared, err
 	}
 
 	// received clients public key
-	pubRecvd, err := recvPublic(s.conn)
+	pubRecvd, err := receivePublicKey("server handshake:", s.conn)
 	if err != nil {
 		return shared, err
 	}
@@ -41,19 +46,19 @@ func (s *Server) keyExchange() ([32]byte, error) {
 func (c *Client) keyExchange() ([32]byte, error) {
 	var shared [32]byte
 
-	priv, pub, err := generateKeys()
+	priv, pub, err := generateECDHKeyPair()
 	if err != nil {
 		return shared, err
 	}
 
 	// received servers public key
-	pubRecvd, err := recvPublic(c.conn)
+	pubRecvd, err := receivePublicKey("client handshake:", c.conn)
 	if err != nil {
 		return shared, err
 	}
 
 	// send clients public key
-	err = sendPublic(c.conn, pub)
+	err = sendPublicKey("client handshake:", c.conn, pub)
 	if err != nil {
 		return shared, err
 	}
@@ -64,67 +69,60 @@ func (c *Client) keyExchange() ([32]byte, error) {
 	return shared, nil
 }
 
-func generateKeys() (*ecdsa.PrivateKey, *ecdsa.PublicKey, error) {
-	priva, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+func generateECDHKeyPair() (*ecdsa.PrivateKey, *ecdsa.PublicKey, error) {
+	privateKey, err := ecdsa.GenerateKey(ellipticCurve, rand.Reader)
 	if err != nil {
 		return nil, nil, err
 	}
-
-	puba := &priva.PublicKey
-	if !priva.IsOnCurve(puba.X, puba.Y) {
-		return nil, nil, errors.New("keys created arn't on curve")
-	}
-
-	return priva, puba, err
+	return privateKey, &privateKey.PublicKey, nil
 }
 
-func sendPublic(conn net.Conn, pub *ecdsa.PublicKey) error {
+func sendPublicKey(who string, conn net.Conn, pub *ecdsa.PublicKey) error {
 	pubSend := publicKeyToBytes(pub)
 	if pubSend == nil {
-		return errors.New("public key cannot be converted to bytes")
+		return errors.New(who + " public key cannot be converted to bytes")
 	}
 
 	_, err := conn.Write(pubSend)
 	if err != nil {
-		return errors.New("could not sent public key")
+		return errors.New(who + " could not sent public key")
+	} else {
+		log.Debugln(who + " sent public key to client")
 	}
 
 	return nil
 }
 
-func recvPublic(conn net.Conn) (*ecdsa.PublicKey, error) {
+func receivePublicKey(who string, conn net.Conn) (*ecdsa.PublicKey, error) {
 	buff := make([]byte, 98)
 	i, err := conn.Read(buff)
 	if err != nil {
-		return nil, errors.New("didn't received public key")
+		return nil, errors.New(who + " didn't received public key")
+	} else {
+		log.Debugln(who + " received public key")
 	}
 
 	if i != 97 {
-		return nil, errors.New("public key received isn't valid length")
+		return nil, errors.New(who + " public key received isn't valid length")
 	}
 
 	recvdPub := bytesToPublicKey(buff[:i])
 	if !recvdPub.IsOnCurve(recvdPub.X, recvdPub.Y) {
-		return nil, errors.New("didn't received valid public key")
+		return nil, errors.New(who + " didn't received valid public key")
 	}
 
 	return recvdPub, nil
 }
 
 func publicKeyToBytes(pub *ecdsa.PublicKey) []byte {
-	if pub == nil || pub.X == nil || pub.Y == nil {
-		return nil
-	}
-
-	return elliptic.Marshal(elliptic.P384(), pub.X, pub.Y)
+	return elliptic.Marshal(ellipticCurve, pub.X, pub.Y) // TODO
 }
 
 func bytesToPublicKey(recvdPub []byte) *ecdsa.PublicKey {
 	if len(recvdPub) == 0 {
 		return nil
 	}
-
-	x, y := elliptic.Unmarshal(elliptic.P384(), recvdPub)
+	x, y := elliptic.Unmarshal(elliptic.P384(), recvdPub) // TODO
 	return &ecdsa.PublicKey{Curve: elliptic.P384(), X: x, Y: y}
 }
 

@@ -9,58 +9,94 @@ import (
 	"strings"
 )
 
-// StartClient - start the ipc client.
+// DialAndHandshake - start the ipc client and return when connected or connection failed
 // ipcName = is the name of the unix socket or named pipe that the client will try and connect to.
-func StartClient(ipcName string, config *ClientConfig) (*Client, error) {
-	err := checkIpcName(ipcName)
+func DialAndHandshake(ipcName string, config *ClientConfig) (*Client, error) {
+	c, err := DialAndHandshakeWithCallback(ipcName, config, nil)
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// DialAndHandshakeWithCallback - start the ipc client and return when connected or connection failed
+// ipcName = is the name of the unix socket or named pipe that the client will try and connect to.
+func DialAndHandshakeWithCallback(ipcName string, config *ClientConfig, onConnectionStatusChanged func(ClientStatus)) (*Client, error) {
+	c, err := createClient(ipcName, config)
 	if err != nil {
 		return nil, err
 	}
 
-	c := &Client{
-		Name:     ipcName,
-		status:   NotConnected,
-		incoming: make(chan *Message),
-		outgoing: make(chan *Message),
-	}
-
-	if config == nil {
-		c.conf = DefaultClientConfig
+	if onConnectionStatusChanged != nil {
+		c.callback = onConnectionStatusChanged
 	} else {
-		c.conf = *config
+		c.callback = defaultCallbackOnStatusChange
+	}
+	go c.CallbackOnStatusChange(c.callback)
+
+	dialToServer(c)
+	err = c.StartProcessingMessages()
+	if err != nil {
+		return nil, err
 	}
 
-	if c.conf.Timeout < 0 {
-		c.conf.Timeout = DefaultClientConfig.Timeout
-	}
-	if c.conf.RetryTimer <= 0 {
-		c.conf.RetryTimer = DefaultClientConfig.RetryTimer
-	}
-	if c.conf.SocketBasePath == "" {
-		c.conf.SocketBasePath = DefaultClientConfig.SocketBasePath
-	}
-
-	go startClient(c)
-
+	log.Debugf("client: successfully waited, client is now '%s'", c.status)
 	return c, nil
 }
 
-func startClient(c *Client) {
-	c.status = Connecting
-	log.Debugln("client sending initial IpcInternal msg")
-	c.incoming <- &Message{Status: c.status.String(), MsgType: IpcInternal}
-
-	err := c.dial()
+// DialAndHandshakeAsync - start the ipc client and return immediately while client connects to server in the background
+// You have to call StartProcessingMessages() once you want to send/receive messages yourself then.
+// ipcName = is the name of the unix socket or named pipe that the client will try and connect to.
+func DialAndHandshakeAsync(ipcName string, config *ClientConfig, onConnectionStatusChanged func(ClientStatus)) (*Client, error) {
+	c, err := createClient(ipcName, config)
 	if err != nil {
-		c.incoming <- &Message{Err: err, MsgType: IpcInternal}
-		return
+		return nil, err
 	}
+	go c.CallbackOnStatusChange(onConnectionStatusChanged)
+	go dialToServer(c)
 
-	c.status = Connected
-	c.incoming <- &Message{Status: c.status.String(), MsgType: IpcInternal}
+	log.Debugf("client starting in background...")
+	return c, nil
+}
 
+func (c *Client) StartProcessingMessages() error {
+	if c.status != CConnected {
+		return errors.New("client is not connected to server")
+	}
 	go c.clientReadDataFromConnectionToIncomingChannel()
 	go c.clientWriteDataFromOutgoingChannelToConnection()
+	return nil
+}
+
+func defaultCallbackOnStatusChange(status ClientStatus) {
+	// nothing
+}
+func (c *Client) CallbackOnStatusChange(onConnected func(ClientStatus)) {
+	for {
+		status := <-c.statusChannel
+		log.Statusf("client: client status is now '%s'", c.status)
+		if onConnected != nil {
+			onConnected(status)
+		}
+	}
+}
+
+func dialToServer(c *Client) {
+	log.Debugln("client: dialToServer")
+	c.status = CConnecting
+	c.statusChannel <- CConnecting
+
+	err := c.clientDialAndHandshakeToServer()
+	if err != nil {
+		log.Warn(err)
+		c.status = CError
+		c.statusChannel <- CError
+		return
+	}
+	c.status = CConnected
+	log.Debugln("client BEFORE connected <- true")
+	c.statusChannel <- CConnected
+	log.Debugln("client connected <- true")
 }
 
 func (c *Client) clientReadDataFromConnectionToIncomingChannel() {
@@ -79,23 +115,19 @@ func (c *Client) clientReadDataFromConnectionToIncomingChannel() {
 			break
 		}
 
+		var err error
 		if c.conf.Encryption {
-			msgFinal, err := decrypt(*c.enc.cipher, msg)
+			msg, err = decrypt(*c.enc.cipher, msg)
 			if err != nil {
 				break
 			}
-
-			if bytesToInt(msgFinal[:4]) == 0 {
-				//  type 0 = control message
-			} else {
-				c.incoming <- &Message{Data: msgFinal[4:], MsgType: bytesToMsgType(msgFinal[:4])}
-			}
+		}
+		msgTypeInt := bytesToInt(msg[:4])
+		msgData := msg[4:]
+		if msgTypeInt < 0 {
+			// TODO some func to call for internal messages from the other side
 		} else {
-			if bytesToInt(msg[:4]) == 0 {
-				//  type 0 = control message
-			} else {
-				c.incoming <- &Message{Data: msg[4:], MsgType: bytesToMsgType(msg[:4])}
-			}
+			c.incoming <- NewMessage(MsgType(msgTypeInt), msgData)
 		}
 	}
 }
@@ -105,17 +137,16 @@ func (c *Client) readData(buff []byte) bool {
 	if err != nil {
 		if strings.Contains(err.Error(), "EOF") { // the connection has been closed by the client.
 			c.conn.Close()
-			if c.status != Closing || c.status == Closed {
+			if c.status != CClosing {
 				go c.reconnect()
 			}
 
 			return false
 		}
 
-		if c.status == Closing {
-			c.status = Closed
-			c.incoming <- &Message{Status: c.status.String(), MsgType: IpcInternal}
-			c.incoming <- &Message{Err: errors.New("client has closed the connection"), MsgType: -2}
+		if c.status == CClosing {
+			c.status = CClosed
+			c.statusChannel <- CClosed
 
 			return false
 		}
@@ -128,21 +159,23 @@ func (c *Client) readData(buff []byte) bool {
 }
 
 func (c *Client) reconnect() {
-	c.status = ReConnecting
-	c.incoming <- &Message{Status: c.status.String(), MsgType: IpcInternal}
-	err := c.dial() // connect to the pipe
+	c.ClearConnectionStatus()
+	c.status = CReConnecting
+	c.statusChannel <- CReConnecting
+	err := c.clientDialAndHandshakeToServer() // connect to the pipe
 	if err != nil {
 		if err.Error() == "client timed out trying to connect" {
-			c.status = Timeout
-			c.incoming <- &Message{Status: c.status.String(), MsgType: IpcInternal}
-			c.incoming <- &Message{Err: errors.New("timed out trying to re-connect"), MsgType: IpcInternal}
+			c.status = CTimeout
+			c.statusChannel <- CTimeout
+		} else {
+			c.status = CError
+			c.statusChannel <- CError
 		}
-
 		return
 	}
 
-	c.status = Connected
-	c.incoming <- &Message{Status: c.status.String(), MsgType: IpcInternal}
+	c.status = CConnected
+	c.statusChannel <- CConnected
 
 	go c.clientReadDataFromConnectionToIncomingChannel()
 }
@@ -168,20 +201,20 @@ func (c *Client) Read() (*Message, error) {
 // Write - writes a  message to the ipc connection.
 // msgType - denotes the type of data being sent. 0 is a reserved type for internal messages and errors.
 func (c *Client) Write(msgType MsgType, message []byte) error {
-	if msgType == IpcCtrl {
-		return errors.New(fmt.Sprintf("client message type %d is reserved", IpcCtrl))
+	if msgType <= 0 {
+		return errors.New(fmt.Sprintf("client Write: cannot because message type %d is reserved (0 or below)", msgType))
 	}
 
-	if c.status != Connected {
-		return errors.New(c.status.String())
+	if c.status != CConnected {
+		return errors.New(fmt.Sprintf("client Write: cannot because client.status is: %s", c.status.String()))
 	}
 
-	mlen := len(message)
-	if mlen > c.conf.MaxMsgSize {
-		return errors.New("client message exceeds maximum message length")
+	msgLength := len(message)
+	if msgLength > c.conf.MaxMsgSize {
+		return errors.New("client Write: cannot because message exceeds maximum message length")
 	}
 
-	c.outgoing <- &Message{MsgType: msgType, Data: message}
+	c.outgoing <- NewMessage(msgType, message)
 
 	return nil
 }
@@ -220,14 +253,58 @@ func (c *Client) clientWriteDataFromOutgoingChannelToConnection() {
 }
 
 // Status StatusCode - returns the current connection status
-func (c *Client) Status() Status {
+func (c *Client) Status() ClientStatus {
 	return c.status
 }
 
 // Close - closes the connection
 func (c *Client) Close() {
-	c.status = Closing
+	c.status = CClosing
+	c.statusChannel <- CClosing
 	if c.conn != nil {
 		c.conn.Close()
 	}
+}
+
+func (c *Client) ClearConnectionStatus() {
+	select {
+	case <-c.statusChannel:
+		// silently emptying "connected" channel (if there is something in it)
+	default:
+		// there wasn't anything in it anyway
+	}
+	c.status = CNotConnected
+	c.statusChannel <- CNotConnected
+}
+
+func createClient(ipcName string, config *ClientConfig) (*Client, error) {
+	err := ipcNameValidate(ipcName)
+	if err != nil {
+		return nil, err
+	}
+
+	c := &Client{
+		Name:          ipcName,
+		status:        CNotConnected,
+		statusChannel: make(chan ClientStatus),
+		incoming:      make(chan *Message),
+		outgoing:      make(chan *Message),
+	}
+
+	if config == nil {
+		c.conf = DefaultClientConfig
+	} else {
+		c.conf = *config
+	}
+
+	if c.conf.Timeout < 0 {
+		c.conf.Timeout = DefaultClientConfig.Timeout
+	}
+	if c.conf.RetryTimer <= 0 {
+		c.conf.RetryTimer = DefaultClientConfig.RetryTimer
+	}
+	if c.conf.SocketBasePath == "" {
+		c.conf.SocketBasePath = DefaultClientConfig.SocketBasePath
+	}
+	return c, nil
 }

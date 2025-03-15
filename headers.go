@@ -17,6 +17,9 @@ func intToBytes(mLen int) []byte {
 func bytesToMsgType(b []byte) MsgType {
 	return MsgType(bytesToInt(b))
 }
+func bytesToIpcMsgType(b []byte) IpcMsgType {
+	return IpcMsgType(bytesToInt(b))
+}
 func bytesToInt(b []byte) int {
 	var mlen uint32
 	binary.Read(bytes.NewReader(b[:]), binary.BigEndian, &mlen) // message length
