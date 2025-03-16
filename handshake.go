@@ -20,7 +20,7 @@ func (s *Server) serverHandshake() error {
 	}
 
 	if s.conf.Encryption {
-		err = s.serverExchangeEncryptionKeysAndCreateCypher()
+		err = s.serverExchangeEncryptionKeysAndCreateCipher()
 		if err != nil {
 			return err
 		}
@@ -78,23 +78,18 @@ func (s *Server) serverSendAndReceiveHandshake1() error {
 	}
 }
 
-func (s *Server) serverExchangeEncryptionKeysAndCreateCypher() error {
-	sharedSecret, err := s.serverKeyExchangeAndCreateSharedSecret()
+func (s *Server) serverExchangeEncryptionKeysAndCreateCipher() error {
+	ownPrivateKey, clientsPublicKey, err := s.serverKeyExchange()
 	if err != nil {
 		return err
 	}
 
-	gcm, err := createCipher(sharedSecret)
+	aeadCipher, err := createCipherViaEcdsaSharedSecret(ownPrivateKey, clientsPublicKey)
 	if err != nil {
 		return err
 	}
 
-	s.enc = &encryption{
-		keyExchange: "ecdsa",
-		encryption:  "AES-GCM-256",
-		cipher:      gcm,
-	}
-
+	s.cipher = aeadCipher
 	return nil
 }
 
@@ -104,7 +99,7 @@ func (s *Server) serverSendMaxMsgSizeConstraint() error {
 	binary.BigEndian.PutUint32(buff, uint32(s.conf.MaxMsgSize))
 
 	if s.conf.Encryption {
-		encryptedMsg, err := encrypt(*s.enc.cipher, buff)
+		encryptedMsg, err := encrypt(s.cipher, buff)
 		if err != nil {
 			return err
 		}
@@ -146,7 +141,7 @@ func (c *Client) clientDoPassiveHandshake() error {
 	}
 
 	if c.conf.Encryption {
-		err := c.startEncryption()
+		err := c.clientDoPassiveExchangeEncryptionKeysAndCreateCipher()
 		if err != nil {
 			return err
 		}
@@ -191,23 +186,18 @@ func (c *Client) clientReceiveAndSendHandshake1() error {
 	return nil
 }
 
-func (c *Client) startEncryption() error {
-	shared, err := c.keyExchange()
+func (c *Client) clientDoPassiveExchangeEncryptionKeysAndCreateCipher() error {
+	ownPrivateKey, serversPublicKey, err := c.clientKeyExchange()
 	if err != nil {
 		return err
 	}
 
-	gcm, err := createCipher(shared)
+	aeadCipher, err := createCipherViaEcdsaSharedSecret(ownPrivateKey, serversPublicKey)
 	if err != nil {
 		return err
 	}
 
-	c.enc = &encryption{
-		keyExchange: "ECDSA",
-		encryption:  "AES-GCM-256",
-		cipher:      gcm,
-	}
-
+	c.cipher = aeadCipher
 	return nil
 }
 
@@ -228,7 +218,7 @@ func (c *Client) clientReceiveMaxMsgSizeConstraint() error {
 	}
 	var buff2 []byte
 	if c.conf.Encryption {
-		buff2, err = decrypt(*c.enc.cipher, bytesFromServer)
+		buff2, err = decrypt(c.cipher, bytesFromServer)
 		if err != nil {
 			return errors.New("client handshake2: failed to receive max message length 3")
 		}

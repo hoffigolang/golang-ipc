@@ -117,7 +117,7 @@ func (c *Client) clientReadDataFromConnectionToIncomingChannel() {
 
 		var err error
 		if c.conf.Encryption {
-			msg, err = decrypt(*c.enc.cipher, msg)
+			msg, err = decrypt(c.cipher, msg)
 			if err != nil {
 				break
 			}
@@ -234,7 +234,7 @@ func (c *Client) clientWriteDataFromOutgoingChannelToConnection() {
 		toSend = append(toSend, msg.Data...)
 
 		if c.conf.Encryption {
-			toSend, err = encrypt(*c.enc.cipher, toSend)
+			toSend, err = encrypt(c.cipher, toSend)
 			if err != nil {
 				log.Debugln("client error encrypting data", err)
 				continue

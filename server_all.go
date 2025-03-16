@@ -89,7 +89,7 @@ func (s *Server) serverReadDataFromConnectionToIncomingChannel() {
 
 		var err error
 		if s.conf.Encryption {
-			msg, err = decrypt(*s.enc.cipher, msg)
+			msg, err = decrypt(s.cipher, msg)
 			if err != nil {
 				s.incoming <- NewIpcErrorMessage(err)
 				continue
@@ -188,7 +188,7 @@ func (s *Server) serverWriteDataFromOutgoingChannelToConnection() {
 
 		if s.conf.Encryption {
 			toSend = append(toSend, msg.Data...)
-			toSend, err = encrypt(*s.enc.cipher, toSend)
+			toSend, err = encrypt(s.cipher, toSend)
 			if err != nil {
 				log.Debugln("server error encrypting data", err)
 

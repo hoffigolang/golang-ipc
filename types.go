@@ -17,7 +17,7 @@ type Server struct {
 	callback              func(ServerStatus)
 	incoming              chan *Message
 	outgoing              chan *Message
-	enc                   *encryption
+	cipher                *cipher.AEAD
 	conf                  ServerConfig
 }
 
@@ -30,7 +30,7 @@ type Client struct {
 	callback      func(ClientStatus)
 	incoming      chan *Message
 	outgoing      chan *Message
-	enc           *encryption
+	cipher        *cipher.AEAD
 	conf          ClientConfig
 }
 
@@ -253,11 +253,4 @@ type ClientConfig struct {
 	RetryTimer     time.Duration
 	MaxMsgSize     int
 	Encryption     bool
-}
-
-// Encryption - encryption settings
-type encryption struct {
-	keyExchange string
-	encryption  string
-	cipher      *cipher.AEAD
 }
