@@ -5,8 +5,7 @@ package ipc
 
 import (
 	"errors"
-	"github.com/igadmg/golang-ipc/ipcconfig"
-	log "github.com/igadmg/golang-ipc/ipclogging"
+	log "github.com/hoffigolang/golang-ipc/ipclogging"
 	"net"
 	"os"
 	"path/filepath"
@@ -43,8 +42,8 @@ func (s *Server) serverRun() error {
 	return nil
 }
 
-// clientConnectAndHandshakeToServer connect to the unix socket created by the server -  for unix and linux
-func (c *Client) clientConnectAndHandshakeToServer() error {
+// clientDialAndHandshakeToServer connect to the unix socket created by the server -  for unix and linux
+func (c *Client) clientDialAndHandshakeToServer() error {
 	socketPath := filepath.Join(c.conf.SocketBasePath, c.Name+defaultSocketExt)
 	startTime := time.Now()
 
@@ -59,12 +58,9 @@ func (c *Client) clientConnectAndHandshakeToServer() error {
 
 		socketConnection, err := net.Dial("unix", socketPath)
 		if err != nil {
-			if strings.Contains(err.Error(), "client clientDialAndHandshakeToServer: no such file or directory") {
-			} else if strings.Contains(err.Error(), "client clientDialAndHandshakeToServer: connection refused") {
-			} else {
-				if ipcconfig.IpcSentIpcCtrlMessagesViaChannels {
-					c.incoming <- &Message{Err: err, MsgType: IpcInternal}
-				}
+			if strings.Contains(err.Error(), "no such file or directory") {
+				// waiting for the server to come up
+			} else if strings.Contains(err.Error(), "connection refused") {
 			}
 		} else {
 			c.conn = socketConnection

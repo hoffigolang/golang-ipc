@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	ipc "github.com/igadmg/golang-ipc"
-	log "github.com/igadmg/golang-ipc/ipclogging"
+	ipc "github.com/hoffigolang/golang-ipc"
+	log "github.com/hoffigolang/golang-ipc/ipclogging"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 	"math"

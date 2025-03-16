@@ -5,12 +5,10 @@ package ipc
 
 import (
 	"errors"
-	log "github.com/igadmg/golang-ipc/ipclogging"
+	log "github.com/hoffigolang/golang-ipc/ipclogging"
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/Microsoft/go-winio"
 )
 
 var defaultSocketBasePath = `\\.\pipe\`
@@ -37,7 +35,7 @@ func (s *Server) serverRun() error {
 	return nil
 }
 
-// clientConnectAndHandshakeToServer - attempts to connect to a named pipe created by the server
+// clientDialAndHandshakeToServer - attempts to connect to a named pipe created by the server
 func (c *Client) clientDialAndHandshakeToServer() error {
 	socketPath := filepath.Join(c.conf.SocketBasePath, c.Name)
 	startTime := time.Now()
@@ -53,7 +51,7 @@ func (c *Client) clientDialAndHandshakeToServer() error {
 
 		namedPipe, err := winio.DialPipe(socketPath, nil)
 		if err != nil {
-			if strings.Contains(err.Error(), "client the system cannot find the file specified.") {
+			if strings.Contains(err.Error(), "the system cannot find the file specified.") {
 				// waiting for the server to come up
 			} else {
 				return err

@@ -9,7 +9,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	log "github.com/igadmg/golang-ipc/ipclogging"
+	log "github.com/hoffigolang/golang-ipc/ipclogging"
 	"io"
 	"net"
 )

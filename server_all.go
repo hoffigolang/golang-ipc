@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	log "github.com/igadmg/golang-ipc/ipclogging"
+	log "github.com/hoffigolang/golang-ipc/ipclogging"
 	"io"
 	"time"
 )

@@ -1,7 +1,7 @@
 package ipclogging
 
 import (
-	"github.com/igadmg/golang-ipc/ipcconfig"
+	"github.com/hoffigolang/golang-ipc/ipcconfig"
 	"log"
 )
 

@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	log "github.com/igadmg/golang-ipc/ipclogging"
+	log "github.com/hoffigolang/golang-ipc/ipclogging"
 )
 
 // on connection wish of a client, the server initiates the handshake.
