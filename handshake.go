@@ -79,12 +79,16 @@ func (s *Server) serverSendAndReceiveHandshake1() error {
 }
 
 func (s *Server) serverExchangeEncryptionKeysAndCreateCipher() error {
-	ownPrivateKey, clientsPublicKey, err := s.serverKeyExchange()
+	ownPrivateKey, peerPublicKey, err := s.serverKeyExchange()
 	if err != nil {
 		return err
 	}
 
-	aeadCipher, err := createCipherViaEcdsaSharedSecret(ownPrivateKey, clientsPublicKey)
+	sharedSecret, err := sharedSecretX25519(ownPrivateKey.Bytes(), peerPublicKey.Bytes())
+	if err != nil {
+		return err
+	}
+	aeadCipher, err := createGcmCipherFromX25519SharedKey(sharedSecret)
 	if err != nil {
 		return err
 	}
@@ -187,12 +191,15 @@ func (c *Client) clientReceiveAndSendHandshake1() error {
 }
 
 func (c *Client) clientDoPassiveExchangeEncryptionKeysAndCreateCipher() error {
-	ownPrivateKey, serversPublicKey, err := c.clientKeyExchange()
+	ownPrivateKey, peerPublicKey, err := c.clientKeyExchange()
 	if err != nil {
 		return err
 	}
 
-	aeadCipher, err := createCipherViaEcdsaSharedSecret(ownPrivateKey, serversPublicKey)
+	sharedSecret, err := sharedSecretX25519(ownPrivateKey.Bytes(), peerPublicKey.Bytes())
+	if err != nil { return err}
+
+	aeadCipher, err := createGcmCipherFromX25519SharedKey(sharedSecret)
 	if err != nil {
 		return err
 	}

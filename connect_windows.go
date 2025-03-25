@@ -5,6 +5,7 @@ package ipc
 
 import (
 	"errors"
+	"github.com/Microsoft/go-winio"
 	log "github.com/hoffigolang/golang-ipc/ipclogging"
 	"path/filepath"
 	"strings"

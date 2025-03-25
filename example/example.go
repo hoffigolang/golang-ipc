@@ -17,7 +17,7 @@ func main() {
 		SocketBasePath:    ipc.DefaultServerConfig.SocketBasePath,
 		Timeout:           ipc.DefaultServerConfig.Timeout,
 		MaxMsgSize:        ipc.DefaultServerConfig.MaxMsgSize,
-		Encryption:        false,
+		Encryption:        true,
 		UnmaskPermissions: true, // true will make the socket writable for any user
 	}
 	clientConfig := &ipc.ClientConfig{
@@ -25,7 +25,7 @@ func main() {
 		Timeout:        ipc.DefaultClientConfig.Timeout,
 		RetryTimer:     ipc.DefaultClientConfig.RetryTimer,
 		MaxMsgSize:     ipc.DefaultClientConfig.MaxMsgSize,
-		Encryption:     false,
+		Encryption:     true,
 	}
 
 	waitForServerListening := make(chan bool)
@@ -37,9 +37,9 @@ func main() {
 
 func client(ipcName string, clientConfig *ipc.ClientConfig) {
 	start := time.Now()
-	c, err := ipc.DialAndHandshake("example1", clientConfig)
+	c, err := ipc.ClientDialAndHandshake("example1", clientConfig)
 	if err != nil {
-		log.Println(err)
+		log.Fatal(err)
 		return
 	}
 	//c, err := ipc.DialAndHandshakeAsync("example1", clientConfig, nil)
@@ -58,7 +58,7 @@ func client(ipcName string, clientConfig *ipc.ClientConfig) {
 	//	return
 	//}
 
-	log.Printf("client DialAndHandshake took %s", time.Since(start))
+	log.Printf("client ClientDialAndHandshake took %s", time.Since(start))
 
 	// sending a million messages takes ~24seconds on _my_ Laptop
 	printer := message.NewPrinter(language.German)

@@ -9,9 +9,9 @@ import (
 	"strings"
 )
 
-// DialAndHandshake - start the ipc client and return when connected or connection failed
+// ClientDialAndHandshake - start the ipc client and return when connected or connection failed
 // ipcName = is the name of the unix socket or named pipe that the client will try and connect to.
-func DialAndHandshake(ipcName string, config *ClientConfig) (*Client, error) {
+func ClientDialAndHandshake(ipcName string, config *ClientConfig) (*Client, error) {
 	c, err := DialAndHandshakeWithCallback(ipcName, config, nil)
 	if err != nil {
 		return nil, err
@@ -88,7 +88,7 @@ func dialToServer(c *Client) {
 
 	err := c.clientDialAndHandshakeToServer()
 	if err != nil {
-		log.Warn(err)
+		log.Fatal(err)
 		c.status = CError
 		c.statusChannel <- CError
 		return

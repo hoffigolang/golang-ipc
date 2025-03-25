@@ -63,6 +63,16 @@ func Warnf(format string, v ...any) {
 	log.Printf("WARN "+format, v...)
 }
 
+func Fatal(v ...any) {
+	log.Fatal(append([]any{"WARN "}, v...)...)
+}
+func Fatalln(v ...any) {
+	log.Fatalln(append([]any{"WARN "}, v...)...)
+}
+func Fatalf(format string, v ...any) {
+	log.Fatalf("WARN "+format, v...)
+}
+
 func Status(v ...any) {
 	log.Print(append([]any{"STATE "}, v...)...)
 }
