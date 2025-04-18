@@ -81,13 +81,13 @@ func client(ipcName string, clientConfig *ipc.ClientConfig) {
 	for i := 0; i < msgCount; i++ {
 		m := fmt.Sprintf("Msg: %2d", i+1)
 		log.Printf("client sending '%s'", m)
-		c.Write(ipc.String, []byte(m))
+		c.Send(ipc.String, []byte(m))
 	}
 	log.ContinueLogging()
 	log.Printf("client sending %s msgs took %s", printer.Sprintf("%d", msgCount), time.Since(start))
 
 	log.Println("client sending <action>")
-	c.Write(ipc.String, []byte(ipc.IntermediateActionMessage))
+	c.Send(ipc.String, []byte(ipc.IntermediateActionMessage))
 
 	firstTime := true
 	for {
@@ -98,11 +98,11 @@ func client(ipcName string, clientConfig *ipc.ClientConfig) {
 			log.Println("client waiting for further messages....")
 		}
 
-		message, err := c.Read()
+		message, err := c.Receive()
 		if err == nil {
 			log.Printf("client received Msg(%s): %s - Message type: %d", message.MsgType, string(message.Data), message.MsgType)
 			internalReply := fmt.Sprintf("reply from example client: reply to '%s'", message.Data)
-			c.Write(ipc.Custom, []byte(internalReply))
+			c.Send(ipc.Custom, []byte(internalReply))
 			log.Printf("client sent Msg: '%s'", internalReply)
 			if string(message.Data) == "3.1415926535" {
 				log.Printf("client received magic message, now closing...")
@@ -129,14 +129,14 @@ func server(ipcName string, serverConfig *ipc.ServerConfig, wait chan bool) {
 	log.Printf("server status: %s", s.Status())
 
 	for {
-		msg, err := s.Read()
+		msg, err := s.Receive()
 
 		if err == nil {
 			msgData := string(msg.Data)
 			log.Printf("server received Msg: '%s' - Message type: %d", msgData, msg.MsgType)
 			if msgData == ipc.IntermediateActionMessage {
 				log.Printf("server received INTERMEDIATE '%s' ... reply to action with %f.", msgData, 3.1415926535)
-				err := s.Write(ipc.Float, []byte("3.1415926535"))
+				err := s.Send(ipc.Float, []byte("3.1415926535"))
 				if err != nil {
 					panic(err)
 				}
@@ -146,7 +146,7 @@ func server(ipcName string, serverConfig *ipc.ServerConfig, wait chan bool) {
 				s.Close()
 				return
 			} else if msgData == ipc.InitialMessage {
-				err := s.Write(ipc.Float, []byte("2.71828"))
+				err := s.Send(ipc.Float, []byte("2.71828"))
 				if err != nil {
 					panic(err)
 				}

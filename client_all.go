@@ -180,9 +180,9 @@ func (c *Client) reconnect() {
 	go c.clientReadDataFromConnectionToIncomingChannel()
 }
 
-// Read - blocking function that receives messages
+// Receive - blocking function that receives messages
 // if MsgType is a negative number it's an internal message
-func (c *Client) Read() (*Message, error) {
+func (c *Client) Receive() (*Message, error) {
 	m, ok := <-c.incoming
 	if !ok {
 		return nil, errors.New("client the received channel has been closed")
@@ -198,20 +198,20 @@ func (c *Client) Read() (*Message, error) {
 	return m, nil
 }
 
-// Write - writes a  message to the ipc connection.
+// Send - writes a  message to the ipc connection.
 // msgType - denotes the type of data being sent. 0 is a reserved type for internal messages and errors.
-func (c *Client) Write(msgType MsgType, message []byte) error {
+func (c *Client) Send(msgType MsgType, message []byte) error {
 	if msgType <= 0 {
-		return errors.New(fmt.Sprintf("client Write: cannot because message type %d is reserved (0 or below)", msgType))
+		return errors.New(fmt.Sprintf("client Send: cannot because message type %d is reserved (0 or below)", msgType))
 	}
 
 	if c.status != CConnected {
-		return errors.New(fmt.Sprintf("client Write: cannot because client.status is: %s", c.status.String()))
+		return errors.New(fmt.Sprintf("client Send: cannot because client.status is: %s", c.status.String()))
 	}
 
 	msgLength := len(message)
 	if msgLength > c.conf.MaxMsgSize {
-		return errors.New("client Write: cannot because message exceeds maximum message length")
+		return errors.New("client Send: cannot because message exceeds maximum message length")
 	}
 
 	c.outgoing <- NewMessage(msgType, message)

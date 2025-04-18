@@ -138,9 +138,9 @@ func (s *Server) readDataFromConnection(buff []byte) bool {
 //    }
 //}
 
-// Read - blocking function, reads each message recieved
+// Receive - blocking function, reads each message received
 // if MsgType is a negative number its an internal message
-func (s *Server) Read() (*Message, error) {
+func (s *Server) Receive() (*Message, error) {
 	msg, ok := <-s.incoming
 	if !ok {
 		return nil, errors.New("server the received channel has been closed")
@@ -153,9 +153,9 @@ func (s *Server) Read() (*Message, error) {
 	return msg, nil
 }
 
-// Write - writes a message to the ipc connection
+// Send - writes a message to the ipc connection
 // msgType - denotes the type of data being sent. 0 is a reserved type for internal messages and errors.
-func (s *Server) Write(msgType MsgType, message []byte) error {
+func (s *Server) Send(msgType MsgType, message []byte) error {
 	if msgType <= 0 {
 		return errors.New(fmt.Sprintf("server message type %d is reserved (0 or below)", msgType))
 	}
