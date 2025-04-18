@@ -139,7 +139,7 @@ func (s *Server) readDataFromConnection(buff []byte) bool {
 //}
 
 // Receive - blocking function, reads each message received
-// if MsgType is a negative number its an internal message
+// if MsgType is a negative number it's an internal message
 func (s *Server) Receive() (*Message, error) {
 	msg, ok := <-s.incoming
 	if !ok {
