@@ -1,0 +1,33 @@
+<mxfile host="drawio-plugin" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" modified="2025-03-31T09:38:53.561Z" version="22.1.22" etag="QryEPoCshuO-pXOOthCB" type="embed">
+  <diagram name="binaryMessageFormat" id="mUyOYyGzMuVK2M10dn_t">
+    <mxGraphModel dx="740" dy="668" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="45sFYzrxXQV10TYeHJq5-1" value="Binary Message on socket/namedPipe" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" parent="1" vertex="1">
+          <mxGeometry x="20" y="80" width="150" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="45sFYzrxXQV10TYeHJq5-2" value="MsgType&lt;br&gt;uint32 (4 Bytes)" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="80" y="120" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="45sFYzrxXQV10TYeHJq5-3" value="MsgLength&lt;br&gt;uint32 (4 Bytes)" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="200" y="120" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="45sFYzrxXQV10TYeHJq5-4" value="Msg Data&lt;br&gt;[]bytes" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="320" y="120" width="400" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="45sFYzrxXQV10TYeHJq5-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;curved=1;" parent="1" source="45sFYzrxXQV10TYeHJq5-5" target="45sFYzrxXQV10TYeHJq5-3" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="520" y="80" />
+              <mxPoint x="260" y="80" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="45sFYzrxXQV10TYeHJq5-5" value="" style="verticalLabelPosition=bottom;shadow=0;dashed=0;align=center;html=1;verticalAlign=top;strokeWidth=1;shape=mxgraph.mockup.markup.curlyBrace;whiteSpace=wrap;strokeColor=#999999;" parent="1" vertex="1">
+          <mxGeometry x="320" y="100" width="400" height="20" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	ipc "github.com/hoffigolang/golang-ipc"
 	log "github.com/hoffigolang/golang-ipc/ipclogging"
+	//m "github.com/hoffigolang/golang-ipc/msg"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 	"math"
@@ -12,6 +13,10 @@ import (
 
 func main() {
 	log.DoDebug = true
+
+	//msg := m.NewStringMsg("hello World")
+	//fmt.Println(msg.S())
+	//syscall.Exit(0)
 
 	serverConfig := &ipc.ServerConfig{
 		SocketBasePath:    ipc.DefaultServerConfig.SocketBasePath,

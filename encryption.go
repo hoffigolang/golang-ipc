@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"errors"
+	"github.com/hoffigolang/golang-ipc/encryption"
 	log "github.com/hoffigolang/golang-ipc/ipclogging"
 	"golang.org/x/crypto/curve25519"
 	"io"
@@ -19,7 +20,7 @@ var ellipticCurve = elliptic.P384() // sharedSecretByteLength = 48 marshalledPub
 
 // serverKeyExchange - get other side's public key
 func (s *Server) serverKeyExchange() (*ecdh.PrivateKey, *ecdh.PublicKey, error) {
-	priv, err := ecdh.X25519().GenerateKey(rand.Reader)
+	priv, err := encryption.NewX25519KeyPair()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -41,7 +42,7 @@ func (s *Server) serverKeyExchange() (*ecdh.PrivateKey, *ecdh.PublicKey, error) 
 }
 
 func (c *Client) clientKeyExchange() (*ecdh.PrivateKey, *ecdh.PublicKey, error) {
-	priv, err := ecdh.X25519().GenerateKey(rand.Reader)
+	priv, err := encryption.NewX25519KeyPair()
 	if err != nil {
 		return nil, nil, err
 	}
